@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Kundenkarten</title>
+  <meta name="description" content="Kundenkarten offline verwalten – mit Bildern, Barcodes und QR-Codes.">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Karten">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div class="top-row">
+        <h1>Karten</h1>
+        <div class="top-actions">
+          <button id="btnArrange" class="glass round press" aria-label="Fixierte Karten anordnen"></button>
+          <button id="btnMenu" class="glass round press" aria-label="Menü"></button>
+        </div>
+      </div>
+      <label class="search glass">
+        <span class="search-ico"></span>
+        <input id="q" type="search" placeholder="Suchen" autocomplete="off" enterkeyhint="search">
+      </label>
+      <nav id="chips" class="chips"></nav>
+    </header>
+    <main id="list"></main>
+    <button id="fab" class="glass fab press" aria-label="Karte hinzufügen"></button>
+  </div>
+
+  <input type="file" id="pickImage" accept="image/*" hidden>
+  <input type="file" id="pickImport" accept="application/json,.json" hidden>
+
+  <script src="vendor/zxing.min.js"></script>
+  <script src="vendor/JsBarcode.all.min.js"></script>
+  <script src="vendor/qrcode.js"></script>
+  <script src="profiles.js"></script>
+  <script src="sujets.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
