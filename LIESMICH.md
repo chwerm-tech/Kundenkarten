@@ -10,20 +10,22 @@ Alle Karten und Bilder bleiben lokal auf dem iPhone (IndexedDB). Es gibt keinen 
 2. Die Adresse auf dem iPhone in **Safari** öffnen.
 3. Teilen → **Zum Home-Bildschirm**.
 4. Die App einmal mit Internet öffnen und ca. 10 Sekunden warten. Danach ist sie auch offline bereit
-   (das Menü ⋯ zeigt «Offline: bereit ✓»).
+   (das Menü ☰ oben links zeigt «Offline: bereit ✓»).
 
 ## Funktionen
+- Startseite «Karten-Verwaltung»: alle Kartenvorderseiten als Raster (iPhone: 2 Spalten), Antippen zeigt Barcode und Details
+- Menü ☰ oben links: Neue Karte, Karten bearbeiten (Tabelle mit Suche), Reihenfolge, Katalog & Sujets, Backup
 - Vorder- und Rückseite fotografieren, zuschneiden und drehen
 - Barcode und QR-Code werden automatisch erkannt (EAN, Code 128/39, ITF, QR, Aztec, Data Matrix …)
 - Die Texterkennung füllt Nummer, Inhaber und «Gültig bis» aus und erkennt die Vorlage (zum Beispiel Cumulus oder Supercard)
 - 33 Schweizer Vorlagen, eigene Karten, alles auch manuell erfassbar
 - Katalog-Sujets: Jede Karte wird als Kartenbild mit deinen persönlichen Angaben (Nummer, Name, Gültigkeit, Barcode) dargestellt.
-  Pro Anbieter lässt sich ein echtes Kartenbild hinterlegen (Menü ⋯ → Katalog & Sujets). Alternativ zeigt die App deine eigenen Fotos.
+  Pro Anbieter lässt sich ein echtes Kartenbild hinterlegen (Menü ☰ oben links → Katalog & Sujets). Alternativ zeigt die App deine eigenen Fotos.
 - Bewertung mit 1–5 Sternen: Favoriten stehen oben
 - «Oben fixieren»: Karten an fester Position, Reihenfolge über ⇅ anpassen
 - Zusatzfelder (PIN, Kundennummer …) und Notizen
 - Detailansicht: Karte durch Wischen oder Tippen umdrehen, Code antippen für das Vollbild an der Kasse
-- Backup als JSON-Datei exportieren und importieren (Menü ⋯)
+- Backup als JSON-Datei exportieren und importieren (Menü ☰ oben links)
 
 ## Hinweis
 Die Daten der Home-Bildschirm-App sind von Safari getrennt. Wer die App löscht, löscht auch die Karten.

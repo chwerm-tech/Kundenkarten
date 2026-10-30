@@ -1,5 +1,5 @@
 // Service Worker: hält die ganze App inkl. Barcode- und Texterkennung offline bereit.
-const VERSION = 'kk-v2';
+const VERSION = 'kk-v3';
 const ASSETS = [
   './', 'index.html', 'app.css', 'app.js', 'profiles.js', 'sujets.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

@@ -35,6 +35,7 @@ const I = {
   rotate: '<path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/>',
   expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   photo: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 2.5-2 4.5 3.5"/>',
   grid: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
 };
@@ -135,14 +136,6 @@ function fmtNum(s) {
 /* =========================================================
    Liste (Tabelle)
    ========================================================= */
-function renderChips() {
-  const cats = [...new Set(state.cards.map((c) => c.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
-  if (state.cat && !cats.includes(state.cat)) state.cat = '';
-  $('#chips').style.display = cats.length > 1 ? '' : 'none';
-  $('#chips').innerHTML = [['', 'Alle'], ...cats.map((c) => [c, c])]
-    .map(([v, l]) => `<button class="chip press${state.cat === v ? ' on' : ''}" data-cat="${esc(v)}">${esc(l)}</button>`).join('');
-}
-
 function rowHTML(c, arrange, idx, total) {
   const end = arrange
     ? `<button class="move" data-move="-1" data-id="${c.id}" ${idx === 0 ? 'disabled' : ''}>${ico('up')}</button>
@@ -159,28 +152,92 @@ function rowHTML(c, arrange, idx, total) {
     </div>`;
 }
 
+/* ---------- Startseite: Kartenraster ---------- */
+function tileFace(c) {
+  if (lookOf(c) === 'photo' && c.front) return `<span class="tile-img" style="background-image:url(${blobURL(c.front)})"></span>`;
+  return cardSVG(c, 'front', { image: sujetURL(c.profileId, 'front') });
+}
+function renderHome() {
+  const grid = $('#grid');
+  const cards = [...pinnedSorted(), ...restSorted()];
+  grid.classList.toggle('is-empty', !cards.length);
+  grid.innerHTML = cards.length
+    ? cards.map((c) => `<button class="tile press" data-open="${c.id}" aria-label="${esc(c.name)}">${tileFace(c)}</button>`).join('')
+    : `<div class="empty"><div class="empty-art"></div><h2>Noch keine Karten</h2>
+        <p>Füge deine erste Kundenkarte hinzu. Weitere Funktionen findest du im Menü oben links.</p>
+        <button class="pill primary press" data-a="new">${ico('plus')}Karte hinzufügen</button></div>`;
+}
+
+/** Alles neu zeichnen, was Karten anzeigt */
 function renderList() {
-  renderChips();
-  const list = $('#list');
-  $('#btnArrange').classList.toggle('active', state.arrange);
-  if (!state.cards.length) {
-    list.innerHTML = `<div class="empty"><div class="empty-art"></div><h2>Noch keine Karten</h2>
-      <p>Tippe auf <b>+</b>, wähle eine Vorlage und fotografiere Vorder- und Rückseite – Nummer und Barcode werden automatisch übernommen.</p></div>`;
-    return;
-  }
-  const pinned = pinnedSorted().filter((c) => state.arrange || matches(c));
-  const rest = restSorted().filter(matches);
-  let html = '';
-  if (pinned.length) {
-    html += `<div class="sec-h"><span>Fixiert</span>${state.arrange ? '<span>Reihenfolge anpassen</span>' : ''}</div>
-      <div class="group">${pinned.map((c, i) => rowHTML(c, state.arrange, i, pinned.length)).join('')}</div>`;
-  }
-  if (rest.length && !state.arrange) {
-    html += `<div class="sec-h"><span>${pinned.length ? 'Weitere Karten' : 'Alle Karten'}</span><span>nach Bewertung</span></div>
-      <div class="group">${rest.map((c) => rowHTML(c, false)).join('')}</div>`;
-  }
-  if (!pinned.length && !rest.length) html = `<div class="empty"><h2>Keine Treffer</h2><p>Für «${esc(state.q || state.cat)}» wurde nichts gefunden.</p></div>`;
-  list.innerHTML = html;
+  renderHome();
+  manageSheet?.refresh();
+}
+
+/* ---------- Menü-Ansicht «Karten bearbeiten» (Tabelle mit Suche) ---------- */
+let manageSheet = null;
+function openManage(arrange = false) {
+  if (manageSheet) { manageSheet.setArrange(arrange); return; }
+  state.q = ''; state.cat = ''; state.arrange = arrange;
+  const sh = openSheet({
+    title: 'Karten bearbeiten',
+    left: `<button class="glass round press" data-a="close" aria-label="Schliessen">${ico('close')}</button>`,
+    right: `<button class="pill primary press" data-a="new">${ico('plus')}Neu</button>`,
+    body: `<label class="search glass"><span class="search-ico">${ico('search')}</span>
+        <input class="m-q" type="search" placeholder="Suchen" autocomplete="off" enterkeyhint="search"></label>
+      <nav class="chips m-chips"></nav>
+      <div class="m-list"></div>`,
+    onClose: () => { manageSheet = null; state.arrange = false; },
+  });
+  manageSheet = sh;
+
+  sh.refresh = () => {
+    const cats = [...new Set(state.cards.map((c) => c.category).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'de'));
+    if (state.cat && !cats.includes(state.cat)) state.cat = '';
+    const chips = $('.m-chips', sh);
+    chips.style.display = cats.length > 1 && !state.arrange ? '' : 'none';
+    chips.innerHTML = [['', 'Alle'], ...cats.map((c) => [c, c])]
+      .map(([v, l]) => `<button class="chip press${state.cat === v ? ' on' : ''}" data-cat="${esc(v)}">${esc(l)}</button>`).join('');
+    const list = $('.m-list', sh);
+    if (!state.cards.length) {
+      list.innerHTML = `<div class="empty"><h2>Noch keine Karten</h2><p>Tippe oben rechts auf <b>Neu</b>.</p></div>`;
+      return;
+    }
+    const pinned = pinnedSorted().filter((c) => state.arrange || matches(c));
+    const rest = restSorted().filter(matches);
+    let html = '';
+    if (pinned.length) {
+      html += `<div class="sec-h"><span>Fixiert</span><button class="link press" data-a="arrange">${state.arrange ? 'Fertig' : 'Reihenfolge ändern'}</button></div>
+        <div class="group">${pinned.map((c, i) => rowHTML(c, state.arrange, i, pinned.length)).join('')}</div>`;
+    }
+    if (rest.length && !state.arrange) {
+      html += `<div class="sec-h"><span>${pinned.length ? 'Weitere Karten' : 'Alle Karten'}</span><span>nach Bewertung</span></div>
+        <div class="group">${rest.map((c) => rowHTML(c, false)).join('')}</div>`;
+    }
+    if (!pinned.length && !rest.length) html = `<div class="empty"><h2>Keine Treffer</h2><p>Für «${esc(state.q || state.cat)}» wurde nichts gefunden.</p></div>`;
+    if (!state.arrange) html += `<p class="hint" style="margin-top:14px">Tippe auf eine Karte, um sie zu bearbeiten oder zu löschen.</p>`;
+    list.innerHTML = html;
+  };
+  sh.setArrange = (v) => {
+    if (v && !state.cards.some((c) => c.pinned)) toast('Zuerst eine Karte fixieren (Karte öffnen → Fixieren)');
+    state.arrange = v && state.cards.some((c) => c.pinned);
+    sh.refresh();
+  };
+
+  $('.m-q', sh).addEventListener('input', (e) => { state.q = e.target.value.trim(); sh.refresh(); });
+  sh.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-cat]');
+    if (chip) { state.cat = chip.dataset.cat; return sh.refresh(); }
+    const mv = e.target.closest('[data-move]');
+    if (mv) return movePinned(mv.dataset.id, +mv.dataset.move);
+    const a = e.target.closest('[data-a]')?.dataset.a;
+    if (a === 'close') return sh.close();
+    if (a === 'new') return openEditor(null);
+    if (a === 'arrange') return sh.setArrange(!state.arrange);
+    const row = e.target.closest('[data-open]');
+    if (row && !state.arrange) openEditor(byId(row.dataset.open));
+  });
+  sh.setArrange(arrange);
 }
 
 async function movePinned(id, dir) {
@@ -1182,23 +1239,46 @@ async function importBackup() {
   toast(`${data.cards.length} Karten importiert`);
 }
 
-async function openMenu(anchor) {
-  let offline = false;
-  try { offline = !!(await caches.match('vendor/ocr/deu.traineddata.gz')); } catch (e) { /* kein Cache */ }
-  const persisted = await navigator.storage?.persisted?.().catch(() => false);
-  popover(anchor, `
-    <button data-m="catalog">Katalog & Sujets ${ico('grid')}</button>
+function openDrawer() {
+  const scrim = document.createElement('div');
+  scrim.className = 'scrim';
+  scrim.style.zIndex = 60;
+  const dr = document.createElement('aside');
+  dr.className = 'drawer glass';
+  dr.innerHTML = `
+    <div class="drawer-head"><b>Menü</b><button class="round press" data-m="close" aria-label="Schliessen">${ico('close')}</button></div>
+    <button class="press" data-m="new">${ico('plus')}Neue Karte</button>
+    <button class="press" data-m="manage">${ico('edit')}Karten bearbeiten</button>
+    <button class="press" data-m="arrange">${ico('arrange')}Reihenfolge fixierter Karten</button>
+    <button class="press" data-m="catalog">${ico('grid')}Katalog & Sujets</button>
     <hr>
-    <button data-m="export">Backup exportieren ${ico('share')}</button>
-    <button data-m="import">Backup importieren ${ico('import')}</button>
-    <hr>
-    <div class="muted">${state.cards.length} Karten · lokal auf diesem Gerät<br>
+    <button class="press" data-m="export">${ico('share')}Backup exportieren</button>
+    <button class="press" data-m="import">${ico('import')}Backup importieren</button>
+    <div class="muted drawer-status">${state.cards.length} Karten · lokal auf diesem Gerät</div>
+    <div class="drawer-foot">Code by Chwerm-Tech</div>`;
+  document.body.append(scrim, dr);
+  raf2(() => { scrim.classList.add('show'); dr.classList.add('show'); });
+  const close = () => { scrim.classList.remove('show'); dr.classList.remove('show'); setTimeout(() => { dr.remove(); scrim.remove(); }, 450); };
+  scrim.addEventListener('click', close);
+  // Status nachladen (Offline-Bereitschaft, geschützter Speicher)
+  (async () => {
+    let offline = false;
+    try { offline = !!(await caches.match('vendor/ocr/deu.traineddata.gz')); } catch (e) { /* kein Cache */ }
+    const persisted = await navigator.storage?.persisted?.().catch(() => false);
+    $('.drawer-status', dr).innerHTML = `${state.cards.length} Karten · lokal auf diesem Gerät<br>
       Offline: ${offline ? 'bereit ✓' : 'wird vorbereitet …'}${persisted ? ' · Speicher geschützt ✓' : ''}<br>
-      Tipp: Regelmässig ein Backup in «Dateien» sichern.</div>`).addEventListener('click', (e) => {
+      Tipp: Regelmässig ein Backup in «Dateien» sichern.`;
+  })();
+  dr.addEventListener('click', (e) => {
     const m = e.target.closest('[data-m]')?.dataset.m;
+    if (!m) return;
+    if (m === 'import') { close(); return importBackup(); } // Dateiauswahl direkt im Tipp öffnen
+    close();
+    if (m === 'new') openEditor(null);
+    if (m === 'manage') openManage(false);
+    if (m === 'arrange') openManage(true);
     if (m === 'catalog') openCatalog();
     if (m === 'export') exportBackup();
-    if (m === 'import') importBackup();
   });
 }
 
@@ -1206,10 +1286,7 @@ async function openMenu(anchor) {
    Start
    ========================================================= */
 async function init() {
-  $('#btnMenu').innerHTML = ico('more');
-  $('#btnArrange').innerHTML = ico('arrange');
-  $('#fab').innerHTML = ico('plus');
-  $('.search-ico').innerHTML = ico('search');
+  $('#btnMenu').innerHTML = ico('menu');
   setupPress();
 
   await DB.open();
@@ -1217,20 +1294,11 @@ async function init() {
   ((await DB.allSujets()) || []).forEach((x) => { state.sujets[x.id] = x; });
   renderList();
 
-  $('#q').addEventListener('input', (e) => { state.q = e.target.value.trim(); renderList(); });
-  $('#chips').addEventListener('click', (e) => { const b = e.target.closest('[data-cat]'); if (b) { state.cat = b.dataset.cat; renderList(); } });
-  $('#fab').addEventListener('click', () => openEditor(null));
-  $('#btnMenu').addEventListener('click', (e) => openMenu(e.currentTarget));
-  $('#btnArrange').addEventListener('click', () => {
-    if (!state.cards.some((c) => c.pinned)) return toast('Zuerst eine Karte fixieren (Detailansicht → Fixieren)');
-    state.arrange = !state.arrange;
-    renderList();
-  });
-  $('#list').addEventListener('click', (e) => {
-    const mv = e.target.closest('[data-move]');
-    if (mv) return movePinned(mv.dataset.id, +mv.dataset.move);
-    const row = e.target.closest('[data-open]');
-    if (row && !state.arrange) openDetail(row.dataset.open);
+  $('#btnMenu').addEventListener('click', openDrawer);
+  $('#grid').addEventListener('click', (e) => {
+    if (e.target.closest('[data-a="new"]')) return openEditor(null);
+    const tile = e.target.closest('[data-open]');
+    if (tile) openDetail(tile.dataset.open);
   });
 
   navigator.storage?.persist?.().catch(() => {});
