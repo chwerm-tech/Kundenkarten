@@ -15,8 +15,8 @@ Alle Karten und Bilder bleiben lokal auf dem iPhone (IndexedDB). Es gibt keinen 
 ## Funktionen
 - Startseite «Karten-Verwaltung»: alle Kartenvorderseiten als Raster (iPhone: 2 Spalten), Antippen zeigt Barcode und Details
 - Menü ☰ oben links: Neue Karte, Karten bearbeiten (Tabelle mit Suche), Reihenfolge, Katalog & Sujets, Backup
-- Vorder- und Rückseite fotografieren, zuschneiden und drehen
-- Barcode und QR-Code werden automatisch erkannt (EAN, Code 128/39, ITF, QR, Aztec, Data Matrix …)
+- Scannen wie ein Dokumentenscanner: Die Karte wird im Foto automatisch gefunden, entzerrt und exakt ins Kartenformat gebracht (Farben, Schrift und Logo bleiben original). Ecken bei Bedarf mit Lupe nachziehen, eine Karte auf dem Kopf wird automatisch gedreht
+- Barcode und QR-Code werden erkannt und im selben Format originalgetreu dargestellt (EAN, UPC, Code 128/39/93, ITF, Codabar, GS1 DataBar, QR, Aztec, Data Matrix, PDF417 …)
 - Die Texterkennung füllt Nummer, Inhaber und «Gültig bis» aus und erkennt die Vorlage (zum Beispiel Cumulus oder Supercard)
 - 33 Schweizer Vorlagen, eigene Karten, alles auch manuell erfassbar
 - Katalog-Sujets: Jede Karte wird als Kartenbild mit deinen persönlichen Angaben (Nummer, Name, Gültigkeit, Barcode) dargestellt.

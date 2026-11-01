@@ -116,7 +116,7 @@ function initials(name) {
 function lookOf(c) {
   if (c.look === 'photo' && (c.front || c.back)) return 'photo';
   if (c.look === 'sujet') return 'sujet';
-  return c.profileId || !c.front ? 'sujet' : 'photo';
+  return c.front ? 'photo' : 'sujet';
 }
 function sujetURL(profileId, side) {
   return blobURL(state.sujets[profileId]?.[side]);
@@ -386,7 +386,19 @@ function toast(msg) {
 /* =========================================================
    Barcode / QR erzeugen
    ========================================================= */
-const JSB = { EAN_13: 'EAN13', EAN_8: 'EAN8', UPC_A: 'UPC', CODE_128: 'CODE128', CODE_39: 'CODE39', ITF: 'ITF', CODABAR: 'codabar' };
+const JSB = { EAN_13: 'EAN13', EAN_8: 'EAN8', UPC_A: 'UPC', UPC_E: 'UPCE', CODE_128: 'CODE128', CODE_39: 'CODE39', ITF: 'ITF', CODABAR: 'codabar' };
+const BWIP = { PDF_417: 'pdf417', CODE_93: 'code93', RSS_14: 'databaromni', RSS_EXPANDED: 'databarexpanded', MAXICODE: 'maxicode' };
+const TWO_D = ['QR_CODE', 'AZTEC', 'DATA_MATRIX', 'MAXICODE'];
+
+function bwipSVG(value, format) {
+  let text = value;
+  if (format === 'RSS_14') {
+    const dgt = value.replace(/\D/g, '');
+    text = '(01)' + (dgt.length === 16 && dgt.startsWith('01') ? dgt.slice(2) : dgt).padStart(14, '0').slice(-14);
+  }
+  const svg = bwipjs.toSVG({ bcid: BWIP[format], text, scale: 3, paddingwidth: 8, paddingheight: 8, backgroundcolor: 'ffffff', parse: format === 'RSS_EXPANDED' });
+  return svg.replace(/<svg([^>]*)>/, (m, a) => `<svg${a.replace(/\s(width|height)="[^"]*"/g, '')} preserveAspectRatio="xMidYMid meet">`);
+}
 qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
 
 function matrixSVG(m) {
@@ -409,6 +421,7 @@ function codeSVG(value, format) {
     }
     if (format === 'AZTEC') return { svg: matrixSVG(new ZXing.AztecCodeWriter().encode(value, ZXing.BarcodeFormat.AZTEC, 0, 0)), qr: true };
     if (format === 'DATA_MATRIX') return { svg: matrixSVG(new ZXing.DataMatrixWriter().encode(value, ZXing.BarcodeFormat.DATA_MATRIX, 0, 0, null)), qr: true };
+    if (BWIP[format] && window.bwipjs) return { svg: bwipSVG(value, format), qr: TWO_D.includes(format) };
   } catch (e) {
     return { svg: '', note: '2D-Code konnte nicht erzeugt werden.' };
   }
@@ -436,7 +449,7 @@ function codeSVG(value, format) {
 /* =========================================================
    Barcode / QR lesen (aus Foto oder Kamera)
    ========================================================= */
-const ZX_FORMATS = ['QR_CODE', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR', 'PDF_417', 'AZTEC', 'DATA_MATRIX'];
+const ZX_FORMATS = ['QR_CODE', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR', 'PDF_417', 'AZTEC', 'DATA_MATRIX', 'RSS_14', 'RSS_EXPANDED', 'MAXICODE'];
 let zxReader;
 function reader() {
   if (!zxReader) {
@@ -489,28 +502,53 @@ function ocrWorker() {
     ocrWorkerP = (async () => {
       await loadScript('vendor/ocr/tesseract.min.js');
       const base = new URL('vendor/ocr/', location.href).href;
-      return Tesseract.createWorker('deu', 1, {
+      const w = await Tesseract.createWorker('deu', 1, {
         workerPath: base + 'worker.min.js', corePath: base, langPath: base,
         gzip: true, workerBlobURL: false, cacheMethod: 'none',
       });
+      return w;
     })().catch((e) => { ocrWorkerP = null; throw e; });
   }
   return ocrWorkerP;
 }
 async function ocr(canvas) {
-  const cv = scaled(canvas, 1600);
+  const cv = scaled(canvas, 1800);
   const ctx = cv.getContext('2d', { willReadFrequently: true });
   const img = ctx.getImageData(0, 0, cv.width, cv.height);
   const d = img.data;
+  // Dunkle Karten (helle Schrift) für die Erkennung umkehren – das gespeicherte Bild bleibt unverändert
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 4) sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  const invert = sum / (d.length / 4) < 120;
   for (let i = 0; i < d.length; i += 4) {
-    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    if (invert) g = 255 - g;
     const v = Math.max(0, Math.min(255, (g - 128) * 1.35 + 128));
     d[i] = d[i + 1] = d[i + 2] = v;
   }
   ctx.putImageData(img, 0, 0);
   const w = await ocrWorker();
-  const { data } = await w.recognize(cv);
-  return data.text || '';
+  // Zwei Durchgänge: automatische Seitenaufteilung (gut für Textzeilen) und
+  // verstreuter Text (findet auch kleine Schrift neben Logos und Codes)
+  const res = [];
+  for (const psm of ['3', '11']) {
+    await w.setParameters({ tessedit_pageseg_mode: psm });
+    res.push((await w.recognize(cv)).data);
+  }
+  return {
+    text: res.map((r) => r.text || '').join('\n'),
+    conf: Math.max(...res.map((r) => r.confidence || 0)),
+    lines: res.flatMap((r) => r.lines || []),
+  };
+}
+
+/** Grösster Schriftzug auf der Karte (meist Logo/Name) */
+function biggestText(lines) {
+  const cand = lines
+    .map((l) => ({ t: (l.text || '').replace(/\s+/g, ' ').trim(), h: l.bbox ? l.bbox.y1 - l.bbox.y0 : 0, c: l.confidence || 0 }))
+    .filter((l) => l.c > 55 && /\p{L}{3,}/u.test(l.t) && l.t.length <= 30 && !/\d{4,}/.test(l.t));
+  cand.sort((a, b) => b.h - a.h);
+  return cand[0]?.t.replace(/[^\p{L}\p{N}&+ .'-]/gu, '').trim() || '';
 }
 
 const STOP = /karte|card|club|member|kunden|plus|family|bonus|punkte|points|www|http|gültig|valid|nummer|number|nr\b|carte/i;
@@ -582,69 +620,92 @@ async function makeThumb(cv) {
   return toBlob(t, 0.8);
 }
 
-/** Zuschneide-Ansicht. Liefert { canvas, source } oder null. */
+/**
+ * Scan-Ansicht: Karte wird automatisch gefunden, die 4 Ecken lassen sich mit Lupe verschieben.
+ * Ergebnis ist entzerrt und exakt im Kartenformat. Liefert { canvas, source } oder null.
+ */
 function cropImage(img) {
   return new Promise((resolve) => {
-    let src = toCanvas(img, 0, 0, img.naturalWidth, img.naturalHeight, 2600);
+    const src = toCanvas(img, 0, 0, img.naturalWidth, img.naturalHeight, 2600);
+    const auto = detectCard(src);
+    const full = [[0, 0], [src.width, 0], [src.width, src.height], [0, src.height]];
+    let quad = (auto || full).map((p) => p.slice());
+
     const wrap = document.createElement('div');
     wrap.className = 'crop-wrap';
-    wrap.innerHTML = `<div class="crop-tip">Rahmen an die Karte anpassen</div>
-      <div class="crop-area"><div class="crop-box"><i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i></div></div>
+    wrap.innerHTML = `<div class="crop-tip">${auto ? 'Karte erkannt – Ecken bei Bedarf verschieben' : 'Ecken auf die Kartenecken ziehen'}</div>
+      <div class="crop-area">
+        <svg class="crop-svg"><path class="crop-mask" fill-rule="evenodd"/><path class="crop-line"/><path class="crop-top"/></svg>
+        ${[0, 1, 2, 3].map((i) => `<i class="corner" data-i="${i}"></i>`).join('')}
+        <canvas class="loupe" width="220" height="220"></canvas>
+      </div>
       <div class="crop-bar">
         <button class="pill press" data-a="cancel">Abbrechen</button>
-        <button class="pill press" data-a="rot" aria-label="Drehen">${ico('rotate')}</button>
+        <button class="pill press" data-a="rot" aria-label="Um 180° drehen">${ico('rotate')}</button>
         <button class="pill press" data-a="full">Ganzes Bild</button>
         <button class="pill primary press" data-a="ok">Fertig</button>
       </div>`;
     document.body.append(wrap);
-    const area = $('.crop-area', wrap), boxEl = $('.crop-box', wrap);
-    let L, box;
+    const area = $('.crop-area', wrap), loupe = $('.loupe', wrap), lctx = loupe.getContext('2d');
+    let L;
+    const toScreen = ([x, y]) => [L.ox + x * L.s, L.oy + y * L.s];
 
-    const layout = (resetBox) => {
-      $('canvas', area)?.remove();
+    const layout = () => {
       const aw = area.clientWidth, ah = area.clientHeight;
       const s = Math.min(aw / src.width, ah / src.height);
-      L = { s, dw: src.width * s, dh: src.height * s };
-      L.ox = (aw - L.dw) / 2; L.oy = (ah - L.dh) / 2;
-      src.style.cssText = `position:absolute;left:${L.ox}px;top:${L.oy}px;width:${L.dw}px;height:${L.dh}px;border-radius:4px`;
-      area.prepend(src);
-      if (resetBox) {
-        let w = L.dw * 0.86, h = w / 1.586;
-        if (h > L.dh * 0.86) { h = L.dh * 0.86; w = h * 1.586; }
-        box = { x: L.ox + (L.dw - w) / 2, y: L.oy + (L.dh - h) / 2, w, h };
-      }
+      L = { s, ox: (aw - src.width * s) / 2, oy: (ah - src.height * s) / 2, aw, ah };
+      src.style.cssText = `position:absolute;left:${L.ox}px;top:${L.oy}px;width:${src.width * s}px;height:${src.height * s}px;border-radius:4px`;
+      if (!src.parentNode) area.prepend(src);
+      $('.crop-svg', wrap).setAttribute('viewBox', `0 0 ${aw} ${ah}`);
       paint();
     };
-    const paint = () => Object.assign(boxEl.style, { left: `${box.x}px`, top: `${box.y}px`, width: `${box.w}px`, height: `${box.h}px` });
-    const clamp = () => {
-      const min = 60;
-      box.w = Math.max(min, Math.min(box.w, L.dw)); box.h = Math.max(min, Math.min(box.h, L.dh));
-      box.x = Math.max(L.ox, Math.min(box.x, L.ox + L.dw - box.w));
-      box.y = Math.max(L.oy, Math.min(box.y, L.oy + L.dh - box.h));
+    const paint = () => {
+      const q = quad.map(toScreen);
+      const poly = `M${q.map((p) => p.join(' ')).join('L')}Z`;
+      $('.crop-mask', wrap).setAttribute('d', `M0 0H${L.aw}V${L.ah}H0Z ${poly}`);
+      $('.crop-line', wrap).setAttribute('d', poly);
+      $('.crop-top', wrap).setAttribute('d', `M${q[0].join(' ')}L${q[1].join(' ')}`);
+      $$('.corner', wrap).forEach((c, i) => { c.style.left = `${q[i][0]}px`; c.style.top = `${q[i][1]}px`; });
+    };
+    const showLoupe = (pt, at) => {
+      const z = 3, r = 110;
+      lctx.clearRect(0, 0, 220, 220);
+      lctx.save();
+      lctx.beginPath(); lctx.arc(r, r, r, 0, Math.PI * 2); lctx.clip();
+      lctx.fillStyle = '#000'; lctx.fillRect(0, 0, 220, 220);
+      const span = (2 * r) / (L.s * z);
+      lctx.drawImage(src, pt[0] - span / 2, pt[1] - span / 2, span, span, 0, 0, 220, 220);
+      lctx.strokeStyle = '#ff9f0a'; lctx.lineWidth = 2;
+      lctx.beginPath(); lctx.moveTo(r - 18, r); lctx.lineTo(r + 18, r); lctx.moveTo(r, r - 18); lctx.lineTo(r, r + 18); lctx.stroke();
+      lctx.restore();
+      loupe.style.left = `${Math.min(L.aw - 60, Math.max(60, at[0]))}px`;
+      loupe.style.top = `${at[1] > 180 ? at[1] - 130 : at[1] + 130}px`;
+      loupe.classList.add('on');
     };
 
     let drag = null;
     area.addEventListener('pointerdown', (e) => {
-      const h = e.target.closest('.h');
-      drag = { mode: h ? h.classList[1] : 'move', x: e.clientX, y: e.clientY, b: { ...box } };
+      const r = area.getBoundingClientRect();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      // Nächste Ecke greifen (grosszügige Trefferfläche)
+      let best = -1, bd = 70;
+      quad.map(toScreen).forEach((p, i) => { const dd = Math.hypot(p[0] - x, p[1] - y); if (dd < bd) { bd = dd; best = i; } });
+      if (best < 0) return;
+      drag = { i: best, ox: x - toScreen(quad[best])[0], oy: y - toScreen(quad[best])[1] };
       area.setPointerCapture(e.pointerId);
+      showLoupe(quad[best], toScreen(quad[best]));
     });
     area.addEventListener('pointermove', (e) => {
       if (!drag) return;
-      const dx = e.clientX - drag.x, dy = e.clientY - drag.y, b = drag.b;
-      const right = b.x + b.w, bottom = b.y + b.h;
-      if (drag.mode === 'move') { box.x = b.x + dx; box.y = b.y + dy; clamp(); }
-      else {
-        let x1 = b.x, y1 = b.y, x2 = right, y2 = bottom;
-        if (drag.mode.includes('l')) x1 = Math.max(L.ox, Math.min(b.x + dx, x2 - 60));
-        if (drag.mode.includes('r')) x2 = Math.min(L.ox + L.dw, Math.max(right + dx, x1 + 60));
-        if (drag.mode.includes('t')) y1 = Math.max(L.oy, Math.min(b.y + dy, y2 - 60));
-        if (drag.mode.includes('b')) y2 = Math.min(L.oy + L.dh, Math.max(bottom + dy, y1 + 60));
-        box = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-      }
+      const r = area.getBoundingClientRect();
+      const sx = e.clientX - r.left - drag.ox, sy = e.clientY - r.top - drag.oy;
+      quad[drag.i] = [Math.max(0, Math.min(src.width, (sx - L.ox) / L.s)), Math.max(0, Math.min(src.height, (sy - L.oy) / L.s))];
       paint();
+      showLoupe(quad[drag.i], toScreen(quad[drag.i]));
     });
-    area.addEventListener('pointerup', () => { drag = null; });
+    const up = () => { drag = null; loupe.classList.remove('on'); };
+    area.addEventListener('pointerup', up);
+    area.addEventListener('pointercancel', up);
 
     const finish = (result) => {
       wrap.classList.remove('show');
@@ -654,15 +715,17 @@ function cropImage(img) {
     wrap.addEventListener('click', (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a === 'cancel') finish(null);
-      if (a === 'rot') { src = rotate90(src); layout(true); }
-      if (a === 'full') finish({ canvas: toCanvas(src), source: src });
-      if (a === 'ok') {
-        const sx = (box.x - L.ox) / L.s, sy = (box.y - L.oy) / L.s;
-        finish({ canvas: toCanvas(src, sx, sy, box.w / L.s, box.h / L.s), source: src });
-      }
+      if (a === 'rot') { quad = [quad[2], quad[3], quad[0], quad[1]]; paint(); }
+      if (a === 'full') finish({ canvas: warpQuad(src, full), source: src });
+      if (a === 'ok') finish({ canvas: warpQuad(src, isConvex(quad) ? orderQuadKeep(quad) : full), source: src });
     });
-    raf2(() => { wrap.classList.add('show'); layout(true); });
+    raf2(() => { wrap.classList.add('show'); layout(); });
   });
+}
+
+/** Reihenfolge der Ecken beibehalten, nur sicherstellen, dass die erste Seite die lange ist */
+function orderQuadKeep(q) {
+  return dist(q[0], q[1]) + dist(q[2], q[3]) >= dist(q[1], q[2]) + dist(q[3], q[0]) ? q : [q[3], q[0], q[1], q[2]];
 }
 
 /* =========================================================
@@ -1013,26 +1076,41 @@ function openEditor(card, detailSheet) {
     const res = await cropImage(img);
     URL.revokeObjectURL(img.src);
     if (!res) return;
-    d[side] = await toBlob(res.canvas);
-    // Vorschaubild ist die Vorderseite (oder die Rückseite, solange keine Vorderseite existiert)
-    if (side === 'front' || !d.front) d.thumb = await makeThumb(res.canvas);
+    let cv = res.canvas;
+    const store = async () => {
+      d[side] = await toBlob(cv, 0.92);
+      // Vorschaubild ist die Vorderseite (oder die Rückseite, solange keine Vorderseite existiert)
+      if (side === 'front' || !d.front) d.thumb = await makeThumb(cv);
+      if (side === 'front') { const dc = dominantColor(cv); d.color = dc.color; d.fg = dc.fg; d.look = 'photo'; }
+    };
+    await store();
 
-    busy = 'Suche Barcode …'; render();
-    const found = !d.barcodeValue && applyBarcode(await findBarcode(res.canvas, res.source));
-    if (found) toast(`${FORMATS.find((f) => f[0] === d.barcodeFormat)?.[1] || 'Code'} erkannt`);
+    busy = 'Suche Barcode / QR-Code …'; render();
+    const found = !d.barcodeValue && applyBarcode(await findBarcode(cv, res.source));
+    if (found) toast(`${FORMATS.find((f) => f[0] === d.barcodeFormat)?.[1] || d.barcodeFormat} erkannt`);
 
     busy = 'Lese Text auf der Karte …'; render();
     try {
-      const text = await ocr(res.canvas);
-      d.ocrText = [d.ocrText, text.trim()].filter(Boolean).join('\n—\n');
-      const info = parseCardText(text);
+      let r = await ocr(cv);
+      // Steht die Karte auf dem Kopf? Dann gedreht nochmals lesen und das Bessere nehmen
+      if (r.conf < 60) {
+        const cv2 = rotate180(cv);
+        const r2 = await ocr(cv2);
+        if (r2.conf > r.conf + 8) { cv = cv2; r = r2; await store(); }
+      }
+      d.ocrText = [d.ocrText, r.text.trim()].filter(Boolean).join('\n—\n');
+      const info = parseCardText(r.text);
       busy = ''; render();
-      if (info.profile && !d.profileId) applyProfile(info.profile);
+      if (info.profile && !d.profileId) {
+        const keep = { color: d.color, fg: d.fg };
+        applyProfile(info.profile);
+        if (side === 'front' || d.front) Object.assign(d, keep); // Farben des Originals behalten
+      }
       if (!d.number && info.number) setVal('number', info.number);
       if (!d.holder && info.holder) setVal('holder', info.holder);
       if (!d.validUntil && info.valid) setVal('validUntil', info.valid);
-      if (!d.name) setVal('name', info.profile?.name || '');
-      renderPreview();
+      if (!d.name) setVal('name', info.profile?.name || (side === 'front' ? biggestText(r.lines) : ''));
+      render();
     } catch (err) {
       console.warn(err);
       busy = ''; render();

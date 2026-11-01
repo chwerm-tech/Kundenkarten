@@ -1,9 +1,9 @@
 // Service Worker: hält die ganze App inkl. Barcode- und Texterkennung offline bereit.
-const VERSION = 'kk-v3';
+const VERSION = 'kk-v4';
 const ASSETS = [
-  './', 'index.html', 'app.css', 'app.js', 'profiles.js', 'sujets.js', 'manifest.webmanifest',
+  './', 'index.html', 'app.css', 'app.js', 'profiles.js', 'sujets.js', 'scan.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
-  'vendor/zxing.min.js', 'vendor/JsBarcode.all.min.js', 'vendor/qrcode.js',
+  'vendor/zxing.min.js', 'vendor/JsBarcode.all.min.js', 'vendor/qrcode.js', 'vendor/bwip-js.min.js',
   'vendor/ocr/tesseract.min.js', 'vendor/ocr/worker.min.js',
   'vendor/ocr/tesseract-core-simd-lstm.wasm.js', 'vendor/ocr/tesseract-core-lstm.wasm.js',
   'vendor/ocr/deu.traineddata.gz',

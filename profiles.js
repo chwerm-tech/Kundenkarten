@@ -43,7 +43,8 @@ window.CATEGORIES = ['Lebensmittel', 'Warenhaus', 'Mode', 'Drogerie & Beauty', '
   'Elektronik', 'Bücher & Medien', 'Tiere', 'Mobilität', 'Freizeit', 'Sonstiges'];
 
 window.FORMATS = [
-  ['EAN_13', 'EAN-13'], ['EAN_8', 'EAN-8'], ['UPC_A', 'UPC-A'], ['CODE_128', 'Code 128'],
-  ['CODE_39', 'Code 39'], ['ITF', 'ITF'], ['CODABAR', 'Codabar'], ['QR_CODE', 'QR-Code'],
-  ['AZTEC', 'Aztec'], ['DATA_MATRIX', 'Data Matrix'], ['NONE', 'Kein Code'],
+  ['EAN_13', 'EAN-13'], ['EAN_8', 'EAN-8'], ['UPC_A', 'UPC-A'], ['UPC_E', 'UPC-E'], ['CODE_128', 'Code 128'],
+  ['CODE_39', 'Code 39'], ['CODE_93', 'Code 93'], ['ITF', 'ITF'], ['CODABAR', 'Codabar'], ['RSS_14', 'GS1 DataBar'],
+  ['RSS_EXPANDED', 'GS1 DataBar Expanded'], ['QR_CODE', 'QR-Code'], ['AZTEC', 'Aztec'], ['DATA_MATRIX', 'Data Matrix'],
+  ['PDF_417', 'PDF417'], ['MAXICODE', 'MaxiCode'], ['NONE', 'Kein Code'],
 ];
