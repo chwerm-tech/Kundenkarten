@@ -1,0 +1,26 @@
+# Einstellungen für Apache-Webspaces (z. B. bei Schweizer Hostern).
+# Auf GitHub Pages wird diese Datei ignoriert.
+
+# Immer über HTTPS ausliefern (nötig für Offline-Betrieb und Kamera auf dem iPhone)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# Dateitypen
+AddType application/manifest+json .webmanifest
+AddType text/javascript .js
+AddType application/wasm .wasm
+
+# Die Sprachdaten der Texterkennung (.gz) unverändert als Datei liefern,
+# nicht vom Server entpacken lassen
+RemoveEncoding .gz
+AddType application/octet-stream .gz
+
+<IfModule mod_headers.c>
+  # Service Worker und Startseite immer frisch prüfen, damit Updates ankommen
+  <FilesMatch "^(sw\.js|index\.html|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
